@@ -1,84 +1,69 @@
-const indexedDB =
-  window.indexedDB ||
-  window.mozIndexedDB ||
-  window.webkitIndexedDB ||
-  window.msIndexedDB ||
-  window.shimIndexedDB;
-
 let db;
-const request = indexedDB.open("budget-tracker", 1);
+// create a new db request for a "budget" database.
+const request = indexedDB.open("budget", 1);
 
-// this event will fire if the database version changes
-request.onupgradeneeded = function (event) {
-  // save a reference to the database
+request.onupgradeneeded = function(event) {
+   // create object store called "pending" and set autoIncrement to true
   const db = event.target.result;
-  db.createObjectStore("new_budget_data", { autoIncrement: true });
+  db.createObjectStore("pending", { autoIncrement: true });
 };
 
-request.onsuccess = function (event) {
-  // when db is successfully created or connection is established, save reference to db in global variable
+request.onsuccess = function(event) {
   db = event.target.result;
 
-  // check if app is online, if yes run uploadBudgetData() to push local data to remote DB.
+  // check if app is online before reading from db
   if (navigator.onLine) {
-    uploadBudgetData();
+    checkDatabase();
   }
 };
 
-// To log errors
-request.onerror = function (event) {
-  console.log(event.target.errorCode);
+request.onerror = function(event) {
+  console.log("Woops! " + event.target.errorCode);
 };
 
-// To Save data locally when attempt is made to submit a record when there is no network connection
 function saveRecord(record) {
-  // create a new DB transaction with read and write permissions
-  const transaction = db.transaction(["new_budget_data"], "readwrite");
+  // create a transaction on the pending db with readwrite access
+  const transaction = db.transaction(["pending"], "readwrite");
 
-  // access the object store for new_budget_data and add record
-  const budgetObjectStore = transaction.objectStore("new_budget_data");
-  budgetObjectStore.add(record);
+  // access your pending object store
+  const store = transaction.objectStore("pending");
+
+  // add record to your store with add method.
+  store.add(record);
 }
 
-function uploadBudgetData() {
-  // create a new DB transaction with read and write permissions
-  const transaction = db.transaction(["new_budget_data"], "readwrite");
+function checkDatabase() {
+  // open a transaction on your pending db
+  const transaction = db.transaction(["pending"], "readwrite");
+  // access your pending object store
+  const store = transaction.objectStore("pending");
+  // get all records from store and set to a variable
+  const getAll = store.getAll();
 
-  // access the object store and get all records from store
-  const budgetObjectStore = transaction.objectStore("new_budget_data");
-  const getAll = budgetObjectStore.getAll;
-
-  getAll.onsuccess = function () {
-    console.log("getAll.onsuccess");
-    // getAll succeeded, check if there is data in indexedDb, and send it to the API server
+  getAll.onsuccess = function() {
     if (getAll.result.length > 0) {
-      console.log("idb.js");
       fetch("/api/transaction/bulk", {
         method: "POST",
         body: JSON.stringify(getAll.result),
         headers: {
           Accept: "application/json, text/plain, */*",
-          "Content-Type": "application/json",
-        },
+          "Content-Type": "application/json"
+        }
       })
-        .then((response) => response.json())
-        .then((serverResponse) => {
-          if (serverResponse.message) {
-            throw new Error(serverResponse);
-          }
-          // open local data store again and clear all items
-          const transaction = db.transaction(["new_budget_data"], "readwrite");
-          const budgetObjectStore = transaction.objectStore("new_budget_data");
-          budgetObjectStore.clear();
+      .then(response => response.json())
+      .then(() => {
+        // if successful, open a transaction on your pending db
+        const transaction = db.transaction(["pending"], "readwrite");
 
-          alert("All saved budget data has been submitted!");
-        })
-        .catch((err) => {
-          console.log(err);
-        });
+        // access your pending object store
+        const store = transaction.objectStore("pending");
+
+        // clear all items in your store
+        store.clear();
+      });
     }
   };
 }
 
 // listen for app coming back online
-window.addEventListener("online", uploadBudgetData);
+window.addEventListener("online", checkDatabase);

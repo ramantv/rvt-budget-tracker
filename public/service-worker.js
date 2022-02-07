@@ -1,4 +1,7 @@
-const CACHE_NAME = "static-cache-v2";
+const APP_PREFIX = 'budget-tracker';     
+const VERSION = 'version_01';
+const CACHE_NAME = APP_PREFIX + VERSION
+
 const DATA_CACHE_NAME = "data-cache-v1";
 
 const FILES_TO_CACHE = [
@@ -52,7 +55,7 @@ self.addEventListener('fetch', function(evt) {
     if (evt.request.url.includes('/api/')) {
         evt.respondWith(
             caches
-            .open(DATA_CACHE_NAME)
+            .open(CACHE_NAME)
             .then(cache => {
                 return fetch(evt.request)
                     .then(response => {
